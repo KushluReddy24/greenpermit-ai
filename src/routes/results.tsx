@@ -6,7 +6,8 @@ import { EcoGauge } from "@/components/eco-gauge";
 import { PollutantCard } from "@/components/pollutant-card";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { recommendations } from "@/lib/mock-data";
+import { generateReport } from "@/lib/pdf";
+
 import { usePredictionStore } from "@/store/predictionStore";
 export const Route = createFileRoute("/results")({
   head: () => ({ meta: [{ title: "Assessment Results — GreenPermit AI" }, { name: "description", content: "AI-predicted emissions, sustainability score, and compliance for your latest assessment." }] }),
@@ -17,6 +18,7 @@ function Results() {
   const prediction = usePredictionStore((state) => state.prediction);
 
 if (!prediction) {
+  
   return (
     <div className="p-10 text-center">
       <h2 className="text-2xl font-bold">No Assessment Found</h2>
@@ -37,20 +39,10 @@ const a = {
   equipment: prediction.equipment,
   fuel: prediction.fuel,
 
-  ecoScore: Math.max(
-    0,
-    Math.round(
-      100 -
-        (
-          prediction.pm10 +
-          prediction.pm25 +
-          prediction.so2 +
-          prediction.no2 +
-          prediction.co +
-          prediction.voc
-        )
-    )
-  ),
+  ecoScore: prediction.ecoScore,
+risk: prediction.risk,
+confidence: prediction.confidence,
+recommendations: prediction.recommendations,
 
   pollutants: [
     {
@@ -98,6 +90,18 @@ const a = {
   ],
 };
   const radarData = a.pollutants.map((p) => ({ pollutant: p.label, value: Math.round((p.value / p.limit) * 100) }));
+  const barData = [
+  { name: "PM10", v: prediction.pm10 },
+  { name: "PM2.5", v: prediction.pm25 },
+  { name: "SO₂", v: prediction.so2 },
+  { name: "NO₂", v: prediction.no2 },
+  { name: "CO", v: prediction.co },
+  { name: "VOC", v: prediction.voc },
+];
+console.log(barData);
+
+
+
   return (
     <div>
       <PageHeader
@@ -107,27 +111,72 @@ const a = {
           <>
             <Button asChild variant="outline"><Link to="/comparison"><GitCompareArrows className="mr-1 h-4 w-4" /> Compare</Link></Button>
             <Button asChild className="gradient-brand text-primary-foreground"><Link to="/reports"><Download className="mr-1 h-4 w-4" /> Export</Link></Button>
+            <Button onClick={() => generateReport(prediction)}>
+    Download Report
+</Button>
           </>
         }
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="glass-card rounded-3xl p-6 flex flex-col items-center justify-center">
-          <EcoGauge score={a.ecoScore} />
-          <div className="mt-2 text-sm text-muted-foreground">Predicted sustainability score</div>
-        </div>
+  <EcoGauge score={a.ecoScore} />
+
+  <div className="mt-2 text-sm text-muted-foreground">
+    Predicted sustainability score
+  </div>
+
+  <div className="mt-4 text-center">
+    <div className="text-sm text-muted-foreground">
+      Risk Level
+    </div>
+
+    <div
+      className={`mt-1 text-xl font-bold ${
+        a.risk === "LOW"
+          ? "text-green-600"
+          : a.risk === "MEDIUM"
+          ? "text-yellow-600"
+          : "text-red-600"
+      }`}
+    >
+      {a.risk}
+    </div>
+
+    <div className="mt-2 text-sm text-muted-foreground">
+      Confidence: {(a.confidence * 100).toFixed(0)}%
+    </div>
+  </div>
+</div>
 
         <div className="glass-card rounded-3xl p-6 lg:col-span-2">
           <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Pollutant vs Regulatory Limit</div>
           <ResponsiveContainer width="100%" height={260}>
-            <RadarChart data={radarData}>
-              <PolarGrid stroke="oklch(0.9 0.02 200)" />
-              <PolarAngleAxis dataKey="pollutant" tick={{ fill: "oklch(0.5 0.03 210)", fontSize: 12 }} />
-              <PolarRadiusAxis stroke="oklch(0.5 0.03 210)" fontSize={10} />
-              <Radar dataKey="value" stroke="oklch(0.62 0.16 160)" fill="oklch(0.62 0.16 160)" fillOpacity={0.35} />
-              <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid oklch(0.9 0.02 200)" }} formatter={(v) => `${v}% of limit`} />
-            </RadarChart>
-          </ResponsiveContainer>
+  <BarChart data={barData}>
+    <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.9 0.02 200)" />
+    <XAxis
+      dataKey="name"
+      stroke="oklch(0.5 0.03 210)"
+      fontSize={12}
+    />
+    <YAxis
+      stroke="oklch(0.5 0.03 210)"
+      fontSize={12}
+    />
+    <Tooltip
+      contentStyle={{
+        borderRadius: 12,
+        border: "1px solid oklch(0.9 0.02 200)",
+      }}
+    />
+    <Bar
+      dataKey="v"
+      fill="oklch(0.55 0.14 220)"
+      radius={[8, 8, 0, 0]}
+    />
+  </BarChart>
+</ResponsiveContainer>
+            
         </div>
       </div>
 
@@ -139,16 +188,8 @@ const a = {
         <div className="glass-card rounded-3xl p-6">
           <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Annual Emissions (tonnes)</div>
           <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={[
-              { name: "CO₂", v: 41200 }, { name: "NOx", v: 320 }, { name: "SO₂", v: 210 },
-              { name: "PM", v: 62 }, { name: "CO", v: 45 }, { name: "VOC", v: 18 },
-            ]}>
-              <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.9 0.02 200)" />
-              <XAxis dataKey="name" stroke="oklch(0.5 0.03 210)" fontSize={12} />
-              <YAxis stroke="oklch(0.5 0.03 210)" fontSize={12} />
-              <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid oklch(0.9 0.02 200)" }} />
-              <Bar dataKey="v" fill="oklch(0.55 0.14 220)" radius={[8, 8, 0, 0]} />
-            </BarChart>
+            
+             <BarChart data={barData}></BarChart>
           </ResponsiveContainer>
         </div>
 
@@ -157,20 +198,32 @@ const a = {
             <Sparkles className="h-5 w-5 text-primary" />
             <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">AI Recommendations</div>
           </div>
-          <div className="space-y-3">
-            {recommendations.slice(0, 3).map((r, i) => (
-              <motion.div key={r.title} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}
-                className="rounded-2xl border border-border/60 p-4 bg-background/50">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="font-semibold text-foreground">{r.title}</div>
-                  <span className="text-xs font-bold text-success shrink-0">{r.impact}</span>
-                </div>
-                <div className="text-sm text-muted-foreground mt-1">{r.detail}</div>
-              </motion.div>
-            ))}
-          </div>
+           <div className="space-y-3">
+  {a.recommendations.map((r, i) => (
+    <motion.div
+      key={r.title}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: i * 0.08 }}
+      className="rounded-2xl border border-border/60 p-4 bg-background/50"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="font-semibold">{r.title}</div>
+
+        <span className="text-xs font-bold text-success">
+          {r.impact}
+        </span>
+      </div>
+
+      <div className="text-sm text-muted-foreground mt-1">
+        {r.detail}
+      </div>
+    </motion.div>
+  ))}
+</div>
+          
           <div className="mt-4 flex items-center gap-2 text-sm text-success">
-            <CheckCircle2 className="h-4 w-4" /> Model confidence: 92%
+            <CheckCircle2 className="h-4 w-4" /> Model confidence: {(a.confidence * 100).toFixed(0)}%
           </div>
         </div>
       </div>
